@@ -51,6 +51,7 @@ export const PREVIEW_AUTOMATION_SERVER_OPERATIONS = [
   "hover",
   "select",
   "drag",
+  "fillCredential",
 ] as const;
 export const PreviewAutomationOperation = Schema.Literals(PREVIEW_AUTOMATION_SERVER_OPERATIONS);
 export type PreviewAutomationOperation = typeof PreviewAutomationOperation.Type;
@@ -470,6 +471,36 @@ export const PreviewAutomationActInput = Schema.Struct({
   timeoutMs: Schema.optional(Schema.Int),
 });
 export type PreviewAutomationActInput = typeof PreviewAutomationActInput.Type;
+
+/** Fork: fills a login from the user's keychain service. The secret never appears in input or result. */
+export const PreviewAutomationFillCredentialInput = Schema.Struct({
+  ...PreviewAutomationTabTargetFields,
+  kind: Schema.optional(
+    Schema.Literals(["login", "totp"]).annotate({
+      description:
+        "login fills username and password; totp fills the current one-time code. Default login.",
+    }),
+  ),
+  itemId: Schema.optional(TrimmedNonEmptyString).annotate({
+    description: "Vault item id. Omit to use the login saved for this site.",
+  }),
+  username: Schema.optional(Locator),
+  password: Schema.optional(Locator),
+  code: Schema.optional(Locator),
+  submit: Schema.optional(Locator),
+});
+export type PreviewAutomationFillCredentialInput = typeof PreviewAutomationFillCredentialInput.Type;
+
+export const PreviewAutomationFillCredentialResult = Schema.Struct({
+  filled: Schema.Array(Schema.Literals(["username", "password", "code"])),
+  submitted: Schema.Literals(["click", "enter"]),
+  outcome: Schema.Literals(["navigated", "formGone", "cleared", "usernameOnly"]).annotate({
+    description:
+      "cleared: the form stayed after submit, so the secret was wiped; snapshot to read the error. usernameOnly: call again on the password step.",
+  }),
+});
+export type PreviewAutomationFillCredentialResult =
+  typeof PreviewAutomationFillCredentialResult.Type;
 
 export const PreviewAutomationEvaluateInput = Schema.Struct({
   ...PreviewAutomationTabTargetFields,
