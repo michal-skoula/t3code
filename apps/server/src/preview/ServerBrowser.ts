@@ -39,6 +39,7 @@ import {
   type PreviewAutomationTypeInput,
   type PreviewAutomationUploadInput,
   type PreviewAutomationWaitForInput,
+  type PreviewAutomationFillCredentialInput,
   PreviewClearProfileError,
   type PreviewEvent,
   type PreviewNavStatus,
@@ -91,6 +92,8 @@ import * as DesktopBrowserChannel from "./DesktopBrowserChannel.ts";
 import * as PreviewAgentActivity from "./PreviewAgentActivity.ts";
 import * as PreviewManager from "./Manager.ts";
 import * as ServerBrowserPage from "./ServerBrowserPage.ts";
+import * as KeychainClient from "./KeychainClient.ts";
+import { fillCredential } from "./credentialFill.ts";
 import * as PreviewBrowser from "./PreviewBrowser.ts";
 import * as PreviewBrowserHost from "./PreviewBrowserHost.ts";
 import { presentAsChrome, ServerBrowserContexts } from "./ServerBrowserContexts.ts";
@@ -402,6 +405,10 @@ interface ServerTab {
   recordingStart: Promise<Recording> | null;
   captureLock: Promise<void>;
   capturing: number;
+  /** Fork: preview_evaluate ran in the current main document, so a fill could be observed. */
+  scriptRan: boolean;
+  /** Fork: a credential was filled in the current main document; evaluate and text waits stay off. */
+  credentialFilled: boolean;
 }
 
 interface ServerDownload {
@@ -583,6 +590,7 @@ const make = Effect.gen(function* () {
     config.baseDir,
   ]);
   const agentScope = yield* AgentScope;
+  const keychain = yield* KeychainClient.fromEnvironment;
   const launchersDir = NodePath.join(config.stateDir, "server-browser", "launchers");
 
   const tabs = new Map<string, ServerTab>();
@@ -1204,6 +1212,8 @@ const make = Effect.gen(function* () {
       abortedNavigation: null,
       captureLock: Promise.resolve(),
       capturing: 0,
+      scriptRan: false,
+      credentialFilled: false,
     };
     if (!desktop) {
       await page.setViewportSize(fixedViewportSize(tab.setting) ?? UNATTACHED_FILL_VIEWPORT);
@@ -1257,6 +1267,11 @@ const make = Effect.gen(function* () {
         url: ServerBrowserPage.withoutDataPayload(request.url()).slice(0, 2048),
         title: "",
       });
+    });
+    // Fork: a new main document drops any script an agent injected, and the filled form.
+    page.on("domcontentloaded", () => {
+      tab.scriptRan = false;
+      tab.credentialFilled = false;
     });
     page.on("load", () => {
       tab.pendingInitialRequestUrl = null;
@@ -2884,13 +2899,44 @@ const make = Effect.gen(function* () {
           ServerBrowserPage.scroll(tab.page, input as PreviewAutomationScrollInput),
         );
       case "evaluate":
+        if (tab.credentialFilled)
+          throw new ServerBrowserPage.ServerBrowserOperationError({
+            tag: "PreviewAutomationExecutionError",
+            message:
+              "preview_evaluate is off on this page after a saved-login fill attempt. Navigate to load a new page first.",
+          });
+        tab.scriptRan = true;
         return ServerBrowserPage.evaluate(
           tab.cdp,
           input as PreviewAutomationEvaluateInput,
           request.timeoutMs,
         );
       case "waitFor":
+        if (tab.credentialFilled && (input as PreviewAutomationWaitForInput).text !== undefined)
+          throw new ServerBrowserPage.ServerBrowserOperationError({
+            tag: "PreviewAutomationExecutionError",
+            message:
+              "Waiting for text is off on this page after a saved-login fill attempt. Wait for a locator or urlIncludes instead.",
+          });
         return ServerBrowserPage.waitFor(tab.page, input as PreviewAutomationWaitForInput);
+      case "fillCredential": {
+        if (tab.desktop)
+          throw new ServerBrowserPage.ServerBrowserOperationError({
+            tag: "PreviewAutomationExecutionError",
+            message: "Saved logins can only be filled in server browser tabs, not desktop tabs.",
+          });
+        if (tab.scriptRan)
+          throw new ServerBrowserPage.ServerBrowserOperationError({
+            tag: "PreviewAutomationExecutionError",
+            message:
+              "preview_evaluate ran on this page, so a saved login is not filled into it. Navigate to load the page again first.",
+          });
+        // Set first: from here the secret may be in the page until it settles.
+        tab.credentialFilled = true;
+        return recordAction(tab, "fillCredential", () =>
+          fillCredential(tab.page, input as PreviewAutomationFillCredentialInput, keychain),
+        );
+      }
       case "recordingStart": {
         const recording = await startRecording(tab);
         return { tabId: tab.tabId, recording: true, startedAt: recording.startedAt };

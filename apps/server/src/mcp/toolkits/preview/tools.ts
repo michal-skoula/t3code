@@ -6,6 +6,8 @@ import {
   PreviewAutomationDialogInput,
   PreviewAutomationError,
   PreviewAutomationEvaluateInput,
+  PreviewAutomationFillCredentialInput,
+  PreviewAutomationFillCredentialResult,
   PreviewAutomationNavigateInput,
   PreviewAutomationOpenInput,
   PreviewAutomationRecordingArtifact,
@@ -179,6 +181,21 @@ const PreviewActTool = browserTool(
   }).annotate(Tool.Title, "Act in preview page"),
 );
 
+// Fork: fills a saved login from the user's keychain service.
+const PreviewFillCredentialTool = browserTool(
+  Tool.make("preview_fill_credential", {
+    description:
+      "Sign in with the user's saved login for the tab's site; you never see the secret. Fills and submits the form. Locators only if detection fails. Username and password on separate pages: call once per page. `kind:'totp'` fills the authenticator code. Afterwards `preview_evaluate` and text waits are off until a new page loads.",
+    parameters: PreviewAutomationFillCredentialInput,
+    success: Schema.Struct({
+      ...PreviewAutomationFillCredentialResult.fields,
+      ...presentationFields,
+    }),
+    failure: PreviewToolFailure,
+    dependencies,
+  }).annotate(Tool.Title, "Fill saved login"),
+);
+
 /** Wrap non-objects: MCP requires object structuredContent, and Claude Code rejects invalid results entirely. */
 export const PreviewEvaluateResult = Schema.Struct({
   ...presentationFields,
@@ -239,6 +256,7 @@ export const PreviewToolkit = Toolkit.make(
   PreviewSetAppearanceTool,
   PreviewSnapshotTool,
   PreviewActTool,
+  PreviewFillCredentialTool,
   PreviewEvaluateTool,
   PreviewWaitForTool,
   PreviewRecordingStartTool,
@@ -253,6 +271,7 @@ export const PreviewStandardToolkit = Toolkit.make(
   PreviewResizeTool,
   PreviewSetAppearanceTool,
   PreviewActTool,
+  PreviewFillCredentialTool,
   PreviewEvaluateTool,
   PreviewWaitForTool,
   PreviewRecordingStartTool,

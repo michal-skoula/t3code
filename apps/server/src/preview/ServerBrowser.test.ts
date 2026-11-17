@@ -1496,6 +1496,27 @@ it.effect("enforces provider ownership and explicit targets when a session has m
         input: { expression: "owned()" },
       });
       expect(result).toBe("evaluated");
+      // Fork: a page that ran preview_evaluate never gets a saved login, and a page that got one
+      // runs no preview_evaluate, until a new document loads.
+      const fillAfterScript = yield* broker
+        .invoke<void>({ scope, tabId, operation: "fillCredential", input: {} })
+        .pipe(Effect.flip);
+      expect(fillAfterScript).toMatchObject({
+        _tag: "PreviewAutomationExecutionError",
+        reason: expect.stringContaining("preview_evaluate ran on this page"),
+      });
+      contexts[0]!.page.emit("domcontentloaded");
+      yield* broker
+        .invoke<void>({ scope, tabId, operation: "fillCredential", input: {} })
+        .pipe(Effect.flip);
+      const scriptAfterFill = yield* broker
+        .invoke<void>({ scope, tabId, operation: "evaluate", input: { expression: "owned()" } })
+        .pipe(Effect.flip);
+      expect(scriptAfterFill).toMatchObject({
+        _tag: "PreviewAutomationExecutionError",
+        reason: expect.stringContaining("after a saved-login fill attempt"),
+      });
+      contexts[0]!.page.emit("domcontentloaded");
       expect(contexts).toHaveLength(2);
 
       const manager = yield* Manager.PreviewManager;

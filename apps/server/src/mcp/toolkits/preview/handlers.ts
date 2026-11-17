@@ -13,6 +13,7 @@ import {
   type ToolActivityIcon,
   type ThreadId,
   type PreviewAutomationOperation,
+  type PreviewAutomationFillCredentialResult,
   type PreviewAutomationOpenInput,
   type PreviewAutomationRecordingStatus,
   type PreviewAutomationResizeResult,
@@ -246,6 +247,10 @@ const handlers = {
         ),
       ),
     ),
+  ),
+  // Fork: the keychain request plus the settle window after submit need more than the 15 s default.
+  preview_fill_credential: McpToolAccess.actsAsCaller((input) =>
+    invokeTargeted<PreviewAutomationFillCredentialResult>("fillCredential", input, 45_000),
   ),
   preview_evaluate: McpToolAccess.actsAsCaller(({ tabId, ...input }) =>
     invoke<unknown>("evaluate", input, undefined, tabId).pipe(
