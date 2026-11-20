@@ -7,7 +7,7 @@ import * as NodeOS from "node:os";
 import * as NodePath from "node:path";
 import type { Browser, BrowserContext, CDPSession } from "playwright-core";
 
-import { sandboxDisabled } from "./PreviewBrowserHost.ts";
+import { renderScale, renderingArgs, sandboxDisabled } from "./PreviewBrowserHost.ts";
 
 // Playwright needs its files on disk. createRequire also resolves it from a Node SEA executable.
 const requirePlaywright = NodeModule.createRequire(import.meta.url);
@@ -154,9 +154,9 @@ export class ServerBrowserContexts {
     return {
       executable,
       env,
+      // Fork: GPU and scale come from T3CODE_SERVER_BROWSER_GPU and T3CODE_SERVER_BROWSER_SCALE.
       args: [
-        "--disable-gpu",
-        "--force-device-scale-factor=2",
+        ...renderingArgs(env),
         "--disable-blink-features=AutomationControlled",
         ...(userAgent ? [`--user-agent=${userAgent}`] : []),
       ],
@@ -260,7 +260,11 @@ export class ServerBrowserContexts {
   }
 
   private async createContext(profileId: string, isolationKey?: string) {
-    const contextOptions = { viewport: { width: 1280, height: 800 }, deviceScaleFactor: 2 };
+    const contextOptions = {
+      viewport: { width: 1280, height: 800 },
+      // Fork: matches --force-device-scale-factor.
+      deviceScaleFactor: renderScale(this.options.env ?? process.env),
+    };
     if (isolationKey !== undefined || profileId === INCOGNITO_BROWSER_PROFILE_ID) {
       return this.sharedContext(contextOptions);
     }
