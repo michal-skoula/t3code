@@ -1,8 +1,10 @@
 import {
+  type AuthClientMetadataDeviceType,
   type AuthClientPresentationMetadata,
   type DesktopSshEnvironmentBootstrap,
   type DesktopSshEnvironmentTarget,
   EnvironmentId,
+  type MessageClientViewport,
 } from "@t3tools/contracts";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
@@ -50,6 +52,28 @@ export class AnalyticsDevice extends Context.Reference<{
 }>("@t3tools/client-runtime/platform/capabilities/AnalyticsDevice", {
   defaultValue: () => ({ id: Effect.succeedNone }),
 }) {}
+
+/** The screen this client shows threads on, read when a message is sent. */
+export class ClientViewport extends Context.Reference<{
+  readonly current: Effect.Effect<Option.Option<MessageClientViewport>>;
+}>("@t3tools/client-runtime/platform/capabilities/ClientViewport", {
+  defaultValue: () => ({ current: Effect.succeedNone }),
+}) {}
+
+export function messageClientViewport(
+  deviceType: AuthClientMetadataDeviceType | undefined,
+  width: number,
+): MessageClientViewport {
+  const device =
+    deviceType === "mobile"
+      ? "phone"
+      : deviceType === "tablet" || deviceType === "desktop"
+        ? deviceType
+        : width < 768
+          ? "phone"
+          : "desktop";
+  return { device, width: Math.max(1, Math.round(width)) };
+}
 
 export class ClientPresentation extends Context.Service<
   ClientPresentation,

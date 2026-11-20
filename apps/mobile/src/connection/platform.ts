@@ -15,7 +15,7 @@ import * as Queue from "effect/Queue";
 import * as Stream from "effect/Stream";
 import Constants from "expo-constants";
 import * as Network from "expo-network";
-import { AppState } from "react-native";
+import { AppState, Dimensions } from "react-native";
 
 import { authClientMetadata } from "../lib/authClientMetadata";
 import * as Runtime from "../lib/runtime";
@@ -147,6 +147,7 @@ const layerWakeups = Wakeups.layer({
 const layerCapabilities = Layer.effectContext(
   Effect.gen(function* () {
     const storage = yield* MobileStorage.MobileStorage;
+    const presentation = authClientMetadata(Constants.expoConfig?.version);
     return Context.make(
       ClientCapabilities.CloudSession,
       ClientCapabilities.CloudSession.of({
@@ -208,9 +209,19 @@ const layerCapabilities = Layer.effectContext(
       Context.add(
         ClientCapabilities.ClientPresentation,
         ClientCapabilities.ClientPresentation.of({
-          metadata: authClientMetadata(Constants.expoConfig?.version),
+          metadata: presentation,
         }),
       ),
+      Context.add(ClientCapabilities.ClientViewport, {
+        current: Effect.sync(() =>
+          Option.some(
+            ClientCapabilities.messageClientViewport(
+              presentation.deviceType,
+              Dimensions.get("window").width,
+            ),
+          ),
+        ),
+      }),
       Context.add(
         ClientCapabilities.SshEnvironmentGateway,
         ClientCapabilities.SshEnvironmentGateway.of({

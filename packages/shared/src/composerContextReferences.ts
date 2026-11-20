@@ -427,6 +427,24 @@ export function projectComposerContextForProvider(input: {
   return `${body}\n\n<${CONTEXT_ENVELOPE_TAG} version="1">\n${entries.join("\n")}\n</${CONTEXT_ENVELOPE_TAG}>`;
 }
 
+/** Context references expanded, then the screen the user sent from. Slash commands stay verbatim. */
+export function projectUserMessageForProvider(message: {
+  readonly text: string;
+  readonly context?: import("@t3tools/contracts").OrchestrationMessageContext | undefined;
+}): string {
+  const text = projectComposerContextForProvider({
+    text: message.text,
+    records: message.context?.records ?? [],
+  });
+  const viewport = message.context?.client;
+  if (viewport === undefined || message.text.trimStart().startsWith("/")) return text;
+  const fit =
+    viewport.width < 768
+      ? " Keep replies and anything you make for them readable at that width: lists instead of wide tables, short code lines, and pages that fit a narrow screen."
+      : "";
+  return `${text}\n\n<client_viewport>The user sent this from a ${viewport.device}, ${viewport.width}px wide.${fit}</client_viewport>`;
+}
+
 const ENVELOPE_CLOSE = `</${CONTEXT_ENVELOPE_TAG}>`;
 const PROVIDER_MARKER = /\[([A-Z][^[\]:;\n]*): ([^[\];\n]*); ref=([^[\]\s]+)\]/g;
 const MARKER_ENVELOPE_PREFIX = `\n\n<${CONTEXT_ENVELOPE_TAG} version="1">\n<${CONTEXT_ENTRY_TAG} kind="`;

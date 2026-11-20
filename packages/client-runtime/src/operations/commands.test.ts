@@ -39,6 +39,7 @@ import {
   type SupervisorConnectionState,
 } from "../connection/model.ts";
 import * as EnvironmentSupervisor from "../connection/supervisor.ts";
+import * as ClientCapabilities from "../platform/capabilities.ts";
 import * as RpcSession from "../rpc/session.ts";
 import type { WsRpcProtocolClient } from "../rpc/protocol.ts";
 import { v2Now, v2Projection, v2ThreadId } from "../state/orchestrationV2TestFixtures.ts";
@@ -303,6 +304,34 @@ describe("V2 environment commands", () => {
         });
       }
       expect(projectionRequests).toEqual([]);
+    }).pipe(Effect.provide(layerTestRandom)),
+  );
+
+  it.effect("sends the client's viewport with each message", () =>
+    Effect.gen(function* () {
+      const commands: OrchestrationV2Command[] = [];
+      const supervisor = yield* makeSupervisor({ commands, projects: [] });
+      const client = { device: "phone", width: 390 } as const;
+
+      yield* startThreadTurn({
+        commandId: CommandId.make("command-viewport"),
+        threadId: v2ThreadId,
+        message: {
+          messageId: MessageId.make("message-viewport"),
+          role: "user",
+          text: "hi",
+          attachments: [],
+        },
+        runtimeMode: "full-access",
+        interactionMode: "default",
+      }).pipe(
+        Effect.provideService(EnvironmentSupervisor.EnvironmentSupervisor, supervisor),
+        Effect.provideService(ClientCapabilities.ClientViewport, {
+          current: Effect.succeedSome(client),
+        }),
+      );
+
+      expect(commands.at(-1)).toMatchObject({ context: { version: 1, records: [], client } });
     }).pipe(Effect.provide(layerTestRandom)),
   );
 

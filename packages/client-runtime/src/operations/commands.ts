@@ -39,6 +39,7 @@ import * as Stream from "effect/Stream";
 import * as SubscriptionRef from "effect/SubscriptionRef";
 
 import * as EnvironmentSupervisor from "../connection/supervisor.ts";
+import * as ClientCapabilities from "../platform/capabilities.ts";
 import {
   EnvironmentRpcUnavailableError,
   getInitialServerConfig,
@@ -751,11 +752,15 @@ export const startThreadTurn = Effect.fn("EnvironmentCommands.startThreadTurn")(
     input.message.messageId,
     input.message.attachments,
   );
-  const context = remapComposerContextAttachments(
+  const remappedContext = remapComposerContextAttachments(
     input.message.context,
     input.message.attachments,
     attachments,
   );
+  const viewport = yield* (yield* ClientCapabilities.ClientViewport).current;
+  const context = Option.isNone(viewport)
+    ? remappedContext
+    : { ...(remappedContext ?? { version: 1 as const, records: [] }), client: viewport.value };
   const bootstrap = input.bootstrap?.createThread;
   const prepareWorktree = input.bootstrap?.prepareWorktree;
   if (bootstrap !== undefined || prepareWorktree !== undefined) {

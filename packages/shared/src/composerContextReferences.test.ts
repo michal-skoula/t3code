@@ -15,6 +15,7 @@ import {
   isImageReferencesOnly,
   parseComposerContextHref,
   projectComposerContextForProvider,
+  projectUserMessageForProvider,
   restoreAttachmentOnlyBootstrapPrompt,
   stripAttachmentOnlyBootstrapPrompt,
   threadContextRecord,
@@ -444,6 +445,29 @@ describe("provider projection", () => {
     expect(projected).toContain('<context kind="terminal" id="ctx_t" unavailable="true"/>');
     expect(projected).not.toContain("another payload");
     expect(projected).not.toContain("boom");
+  });
+});
+
+describe("projectUserMessageForProvider", () => {
+  it("tells the agent the sender's screen, except on slash commands", () => {
+    const phone = {
+      version: 1 as const,
+      records: [],
+      client: { device: "phone", width: 390 } as const,
+    };
+    expect(projectUserMessageForProvider({ text: "Show the table", context: phone })).toBe(
+      "Show the table\n\n<client_viewport>The user sent this from a phone, 390px wide. Keep replies and anything you make for them readable at that width: lists instead of wide tables, short code lines, and pages that fit a narrow screen.</client_viewport>",
+    );
+    expect(
+      projectUserMessageForProvider({
+        text: "Show the table",
+        context: { version: 1, records: [], client: { device: "desktop", width: 1512 } },
+      }),
+    ).toBe(
+      "Show the table\n\n<client_viewport>The user sent this from a desktop, 1512px wide.</client_viewport>",
+    );
+    expect(projectUserMessageForProvider({ text: " /compact", context: phone })).toBe(" /compact");
+    expect(projectUserMessageForProvider({ text: "Show the table" })).toBe("Show the table");
   });
 });
 
