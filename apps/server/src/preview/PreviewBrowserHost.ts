@@ -12,6 +12,32 @@ export const NO_SANDBOX_SIGNATURE = "No usable sandbox";
 export const sandboxDisabled = (env: Readonly<Record<string, string | undefined>>) =>
   env.T3CODE_SERVER_BROWSER_SANDBOX === "0";
 
+/**
+ * Fork: the device pixel ratio server tabs render at. Without a GPU, Chrome draws every pixel on
+ * the CPU, so a slow host can drop from 2 to 1 and draw a quarter of the pixels.
+ */
+export const renderScale = (env: Readonly<Record<string, string | undefined>>) => {
+  const value = Number(env.T3CODE_SERVER_BROWSER_SCALE);
+  return value >= 1 && value <= 3 ? value : 2;
+};
+
+/** Fork: render server tabs on the host GPU through ANGLE on Vulkan instead of SwiftShader. */
+const gpuEnabled = (env: Readonly<Record<string, string | undefined>>) =>
+  env.T3CODE_SERVER_BROWSER_GPU === "1";
+
+const GPU_ARGS = [
+  "--use-angle=vulkan",
+  "--enable-features=Vulkan,VulkanFromANGLE,DefaultANGLEVulkan",
+  "--ignore-gpu-blocklist",
+  "--enable-gpu-rasterization",
+];
+
+/** Fork: the Chrome switches that follow from the two settings above. */
+export const renderingArgs = (env: Readonly<Record<string, string | undefined>>) => [
+  ...(gpuEnabled(env) ? GPU_ARGS : ["--disable-gpu"]),
+  `--force-device-scale-factor=${renderScale(env)}`,
+];
+
 /** Set on Ubuntu 23.10+: unprivileged user namespaces need an AppArmor profile. */
 const USERNS_RESTRICTION = "/proc/sys/kernel/apparmor_restrict_unprivileged_userns";
 export const APPARMOR_PROFILE_PATH = "/etc/apparmor.d/t3-chrome-headless-shell";
