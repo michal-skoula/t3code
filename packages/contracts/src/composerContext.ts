@@ -311,10 +311,18 @@ export const GuestMessageAttribution = Schema.Struct({
 });
 export type GuestMessageAttribution = typeof GuestMessageAttribution.Type;
 
+/** The screen the sender used, so the agent can shape output to fit it. Width is in CSS px. */
+export const MessageClientViewport = Schema.Struct({
+  device: Schema.Literals(["phone", "tablet", "desktop"]),
+  width: PositiveInt,
+});
+export type MessageClientViewport = typeof MessageClientViewport.Type;
+
 /** Structured context riding on a user message. Undecodable records are dropped, not fatal. */
 export const OrchestrationMessageContext = Schema.Struct({
   version: Schema.Literal(1),
   guest: Schema.optional(GuestMessageAttribution),
+  client: Schema.optional(MessageClientViewport),
   records: Schema.Array(Schema.Unknown)
     .check(
       Schema.isMaxLength(COMPOSER_CONTEXT_MAX_RECORDS),

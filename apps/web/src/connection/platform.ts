@@ -432,6 +432,16 @@ const layerCapabilities = Layer.effectContext(
 
     return Context.make(ClientCapabilities.CloudSession, cloudSession).pipe(
       Context.add(ClientCapabilities.AnalyticsDevice, analyticsDevice),
+      Context.add(ClientCapabilities.ClientViewport, {
+        current: Effect.sync(() =>
+          Option.some(
+            ClientCapabilities.messageClientViewport(
+              presentation.metadata.deviceType,
+              window.innerWidth,
+            ),
+          ),
+        ),
+      }),
       Context.add(ClientCapabilities.PrimaryEnvironmentAuth, primaryAuth),
       Context.add(ClientCapabilities.RelayDeviceIdentity, identity),
       Context.add(ClientCapabilities.ClientPresentation, presentation),
