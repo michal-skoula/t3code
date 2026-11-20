@@ -107,7 +107,6 @@ const SavedProfilesJson = Schema.fromJsonString(
 );
 const decodeSavedProfiles = Schema.decodeUnknownEffect(SavedProfilesJson);
 const encodeSavedProfiles = Schema.encodeSync(SavedProfilesJson);
-const RENDER_SCALE = 2;
 // Chromium allows three unacked frames, so 100 ms pacing caps viewers near 30 fps.
 const SCREENCAST_ACK_PACE_MS = 100;
 const SCREENCAST_SETTLE_MS = 200;
@@ -593,6 +592,10 @@ const make = Effect.gen(function* () {
   const keychain = yield* KeychainClient.fromEnvironment;
   const launchersDir = NodePath.join(config.stateDir, "server-browser", "launchers");
 
+  // Fork: set by T3CODE_SERVER_BROWSER_SCALE; ServerBrowserContexts reads the same environment.
+  const browserEnv = yield* HostProcess.Environment;
+  const RENDER_SCALE = PreviewBrowserHost.renderScale(browserEnv);
+
   const tabs = new Map<string, ServerTab>();
   const pendingTabs = new Map<
     string,
@@ -607,6 +610,7 @@ const make = Effect.gen(function* () {
 
   const contexts = new ServerBrowserContexts({
     profilesDir: NodePath.join(config.stateDir, "server-browser", "profiles"),
+    env: browserEnv,
     idleBrowserMs: 5 * 60_000,
     executable: () => runPromise(previewBrowser.executable),
     // An agent scope keeps Chrome out of the server's memory protection and OOM score.
