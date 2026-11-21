@@ -35,7 +35,11 @@ import {
   type ClaudeLedgerUsage,
   type ClaudeModelLedger,
 } from "../../provider/ClaudeTurnTokenUsage.ts";
-import { toMcpElicitationResponse } from "../../provider/CodexMcpElicitation.ts";
+import {
+  describeMcpElicitation,
+  mcpElicitationOffersOneTimeChoice,
+  toMcpElicitationResponse,
+} from "../../provider/CodexMcpElicitation.ts";
 import {
   type CanUseTool,
   type ElicitationRequest,
@@ -4434,11 +4438,13 @@ const withoutSchemaDefaults = (schema: Record<string, unknown>): Record<string, 
 // The card collects consent only; schema defaults must never grant unseen permissions.
 export function claudeMcpElicitationAcceptance(
   request: ElicitationRequest,
+  // Fork: the persistence choices a server's own form offers.
+  decision: "accept" | "acceptForSession" | "acceptAlways" = "accept",
 ): ElicitationResult | undefined {
   if (request.mode === "url" || request.requestedSchema === undefined) return undefined;
   const response = toMcpElicitationResponse(
     { mode: "form", requestedSchema: withoutSchemaDefaults(request.requestedSchema) },
-    "accept",
+    decision,
   );
   // The helper leaves content out when the schema is not a form it can read.
   const filled = response.content;
@@ -4456,6 +4462,25 @@ export function claudeMcpElicitationAcceptance(
     content[key] = value;
   }
   return { action: "accept", content };
+}
+
+// Fork: a form that spells out a one-time choice gets the buttons its choices allow, as on Codex,
+// so an approval server can offer Always and hide it. Other forms keep the fixed buttons.
+export function claudeMcpElicitationOptions(
+  request: ElicitationRequest,
+): ReadonlyArray<ProviderApprovalOption> {
+  if (request.mode === "url" || request.requestedSchema === undefined) {
+    return CLAUDE_MCP_ELICITATION_OPTIONS;
+  }
+  const payload = {
+    serverName: request.serverName,
+    message: request.message,
+    mode: "form",
+    requestedSchema: withoutSchemaDefaults(request.requestedSchema),
+  } as const;
+  return mcpElicitationOffersOneTimeChoice(payload)
+    ? describeMcpElicitation(payload).options
+    : CLAUDE_MCP_ELICITATION_OPTIONS;
 }
 
 const awaitClaudeUserInputAnswers = Effect.fn("awaitClaudeUserInputAnswers")(function* (
@@ -12349,6 +12374,7 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
             // request was dismissed and may be asked another way.
             return { action: "cancel" } satisfies ElicitationResult;
           }
+          const options = claudeMcpElicitationOptions(request);
           const grantKey = `${request.serverName}\u0000${request.message}`;
           if ((yield* Ref.get(mcpElicitationSessionGrants)).has(grantKey)) {
             return acceptance;
@@ -12369,7 +12395,7 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
             requestKind: "mcp-elicitation",
             prompt: request.message,
             appName: request.displayName ?? request.title ?? request.serverName,
-            options: CLAUDE_MCP_ELICITATION_OPTIONS,
+            options,
           });
           const decision = yield* Deferred.make<ClaudeApprovalResponse>();
           yield* Ref.update(pendingRuntimeRequests, (current) => {
@@ -12439,11 +12465,26 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
               runtimeRequest: { ...artifacts.request, status: "cancelled", resolvedAt: now },
             });
           }
+          // Fork: an answer the card did not offer is no consent.
+          if (!options.some((option) => option.decision === resolved)) {
+            return { action: "decline" } satisfies ElicitationResult;
+          }
           if (resolved === "acceptForSession") {
             yield* Ref.update(mcpElicitationSessionGrants, (current) =>
               new Set(current).add(grantKey),
             );
-            return acceptance;
+            // Fork: a form's own session choice also goes to the server, which may keep it.
+            return options === CLAUDE_MCP_ELICITATION_OPTIONS
+              ? acceptance
+              : (claudeMcpElicitationAcceptance(request, resolved) ??
+                  ({ action: "cancel" } satisfies ElicitationResult));
+          }
+          // Fork: the server keeps an Always grant; T3 only passes the choice on.
+          if (resolved === "acceptAlways") {
+            return (
+              claudeMcpElicitationAcceptance(request, resolved) ??
+              ({ action: "cancel" } satisfies ElicitationResult)
+            );
           }
           // Never null: the SDK reads null as answered out of band and leaves
           // the server waiting.
