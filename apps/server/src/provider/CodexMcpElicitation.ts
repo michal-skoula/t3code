@@ -112,9 +112,32 @@ function isMcpElicitationPersistenceField(
   );
 }
 
-export function describeMcpElicitation(
-  payload: EffectCodexSchema.McpServerElicitationRequestParams,
-): { readonly appName: string; readonly options: ReadonlyArray<ProviderApprovalOption> } {
+// Fork: Claude threads describe their elicitations with the same rules, from a request that has
+// no Codex thread fields.
+type McpElicitationDescribeInput = McpElicitationResponseInput & {
+  readonly serverName: string;
+  readonly message: string;
+  readonly _meta?: unknown;
+};
+
+const isMcpElicitationOneTimeValue = (value: string): boolean =>
+  /^(?:once|accept|approve|allow)(?:[_\s-]*(?:once(?:[_\s-]*only)?|this[_\s-]*time))?$/i.test(
+    value.trim(),
+  ) && mcpElicitationPersistenceDecision(value) === null;
+
+// Fork: a form with a one-time choice lists every choice the server accepts, so its buttons come
+// from the form rather than a client's defaults.
+export function mcpElicitationOffersOneTimeChoice(payload: McpElicitationResponseInput): boolean {
+  const form = mcpElicitationFormFields(payload);
+  return Object.values(form?.properties ?? {}).some((field) =>
+    mcpElicitationFieldOptions(field).some((option) => isMcpElicitationOneTimeValue(option.value)),
+  );
+}
+
+export function describeMcpElicitation(payload: McpElicitationDescribeInput): {
+  readonly appName: string;
+  readonly options: ReadonlyArray<ProviderApprovalOption>;
+} {
   const metadata = isMcpElicitationMetadata(payload._meta) ? payload._meta : undefined;
   const appName =
     metadata?.app_name ??
@@ -205,9 +228,7 @@ export function toMcpElicitationResponse(
     const chosenOption = options.find((option) =>
       persist
         ? mcpElicitationPersistenceDecision(option.value) === decision
-        : /^(?:once|accept|approve|allow)(?:[_\s-]*(?:once(?:[_\s-]*only)?|this[_\s-]*time))?$/i.test(
-            option.value.trim(),
-          ) && mcpElicitationPersistenceDecision(option.value) === null,
+        : isMcpElicitationOneTimeValue(option.value),
     );
     if (chosenOption) {
       content[key] = chosenOption.value;

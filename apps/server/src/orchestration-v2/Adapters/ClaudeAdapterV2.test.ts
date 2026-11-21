@@ -1694,6 +1694,70 @@ describe("ClaudeAdapterV2 MCP elicitation acceptance", () => {
       assert.isUndefined(ClaudeAdapterV2.claudeMcpElicitationAcceptance(request));
     }
   });
+
+  const approvalForm = (choices: ReadonlyArray<string>) =>
+    form(
+      {
+        decision: {
+          type: "string",
+          enum: choices,
+          enumNames: choices.map((choice) => (choice === "always" ? "Always allow" : "Allow once")),
+          default: "always",
+        },
+      },
+      ["decision"],
+    );
+
+  it("builds the buttons from a form that spells out its one-time choice", () => {
+    assert.deepEqual(
+      ClaudeAdapterV2.claudeMcpElicitationOptions(approvalForm(["once", "always"])),
+      [
+        { decision: "cancel", label: "Cancel" },
+        { decision: "decline", label: "Decline" },
+        { decision: "acceptAlways", label: "Always allow" },
+        { decision: "accept", label: "Approve" },
+      ],
+    );
+    assert.deepEqual(ClaudeAdapterV2.claudeMcpElicitationOptions(approvalForm(["once"])), [
+      { decision: "cancel", label: "Cancel" },
+      { decision: "decline", label: "Decline" },
+      { decision: "accept", label: "Approve" },
+    ]);
+  });
+
+  it("keeps the session grant buttons for forms without a one-time choice", () => {
+    const fixed = ClaudeAdapterV2.claudeMcpElicitationOptions(form({}));
+    assert.deepEqual(
+      fixed.map((option) => option.decision),
+      ["cancel", "decline", "acceptForSession", "accept"],
+    );
+    assert.deepEqual(
+      ClaudeAdapterV2.claudeMcpElicitationOptions(
+        form({ remember: { type: "boolean", title: "Always allow" } }, ["remember"]),
+      ),
+      fixed,
+    );
+  });
+
+  it("sends the form's own persistence choice", () => {
+    assert.deepEqual(
+      ClaudeAdapterV2.claudeMcpElicitationAcceptance(
+        approvalForm(["once", "always"]),
+        "acceptAlways",
+      ),
+      { action: "accept", content: { decision: "always" } },
+    );
+    assert.deepEqual(
+      ClaudeAdapterV2.claudeMcpElicitationAcceptance(
+        form({ grant: { type: "string", enum: ["once", "session"] } }, ["grant"]),
+        "acceptForSession",
+      ),
+      { action: "accept", content: { grant: "session" } },
+    );
+    assert.isUndefined(
+      ClaudeAdapterV2.claudeMcpElicitationAcceptance(approvalForm(["once"]), "acceptAlways"),
+    );
+  });
 });
 
 const captureSdkExecutablePaths = Effect.fn("captureSdkExecutablePaths")(function* (
@@ -7329,6 +7393,39 @@ describe("ClaudeAdapterV2 background wake turns", () => {
         yield* awaitCard(3);
         assert.isUndefined(otherMessage.pollUnsafe());
         assert.isUndefined(otherServer.pollUnsafe());
+      }).pipe(Effect.scoped, Effect.provide(testLayer)),
+    );
+
+    it.effect("passes a form's Always choice to the server and keeps no grant", () =>
+      Effect.gen(function* () {
+        const { harness, elicit, awaitCard } = yield* startElicitationTurn();
+        const withAlways: ElicitationRequest = {
+          ...approvalOnly,
+          requestedSchema: {
+            type: "object",
+            properties: { decision: { type: "string", enum: ["once", "always"] } },
+            required: ["decision"],
+          },
+        };
+        const first = yield* elicit(withAlways);
+        const request = yield* awaitCard(1);
+        yield* harness.runtime.respondToRuntimeRequest({
+          requestId: request.id,
+          decision: "acceptAlways",
+        });
+        assert.deepEqual(yield* Fiber.join(first), {
+          action: "accept",
+          content: { decision: "always" },
+        });
+
+        // The server owns the grant, so the same prompt shows a card again.
+        const second = yield* elicit(withAlways);
+        const again = yield* awaitCard(2);
+        yield* harness.runtime.respondToRuntimeRequest({
+          requestId: again.id,
+          decision: "acceptForSession",
+        });
+        assert.deepEqual(yield* Fiber.join(second), { action: "decline" });
       }).pipe(Effect.scoped, Effect.provide(testLayer)),
     );
 
