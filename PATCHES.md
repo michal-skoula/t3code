@@ -1,7 +1,8 @@
 # Fork patches
 
 Changes this fork carries on top of upstream T3 Code. The nightly merge agent reads this file after
-every merge and checks each entry against the built server, the way the entry says.
+every merge and checks each entry the way it says. `.fork/check-built-server.sh` runs the
+built-server checks below.
 
 ## preview_fill_credential
 
@@ -26,7 +27,7 @@ Still works if:
 - A fill on a page whose site doesn't match the saved login is refused, and nothing is typed.
 - `preview_evaluate` is refused after a fill until a new page loads, and a fill is refused on a page
   where `preview_evaluate` already ran.
-- Snapshots still show password fields as dots (upstream behavior this relies on).
+- Snapshots never show a filled password's value (upstream masking this relies on).
 
 ## Server browser render scale and GPU
 

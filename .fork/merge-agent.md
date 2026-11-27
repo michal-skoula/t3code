@@ -47,17 +47,23 @@ The user reads your last message in this thread, often on their phone. Keep it s
    - Commits marked `Fork:` are ours. If upstream now does the same thing itself, say so in your
      final message instead of silently keeping both.
 
-4. **Check.**
+4. **Check.** First see what changed since the last deploy:
+   `git diff --name-only origin/deploy HEAD`. If every path is under `.fork/` or is `PATCHES.md`,
+   no server code changed: build, then go to step 5.
+
+   Otherwise:
    - `vp i`, then `vp run check:changed <tag>`. Against the tag, it checks only our changes on top
      of upstream; upstream's own CI covered the rest. If it fails, fix it with a small commit, or ask
      the user when the fix isn't obvious.
    - Run the test files `PATCHES.md` names.
    - Build: `.fork/build.sh .`. It prints `<version> <archive>` and caches the archive in
      `~/t3-builds/` for the deploy.
-   - Work through every `PATCHES.md` entry and check it the way it says, against the built archive
-     where it asks for a running server. To run one without touching the real install, unpack the
-     archive into a temporary directory and start `t3 serve` there with its own `T3CODE_HOME` and
-     a free port. Stop it by the PID you started.
+   - Run `.fork/check-built-server.sh <archive>` in the background and wait for it. It covers the
+     built-server checks of every `PATCHES.md` entry and ends with PASS or FAIL. On FAIL, read the
+     failed lines and the agent output it prints. A test agent that skipped a step can be rerun
+     once; a refusal or result that is wrong is a real failure.
+   - Check by hand only what an entry asks for and the script does not cover. If you add an entry,
+     add its built-server checks to the script.
 
 5. **Ship.** Only when steps 3 and 4 passed:
 
@@ -69,7 +75,7 @@ The user reads your last message in this thread, often on their phone. Keep it s
 6. **Report.** One short message:
    - the tag merged, or "your changes only"
    - conflicts and how you resolved them
-   - what you checked
+   - what you checked, and the agent usage line from `check-built-server.sh`
    - the version string from `build.sh`
    - "deploys at 04:00 Prague"
 
