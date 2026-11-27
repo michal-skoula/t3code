@@ -130,3 +130,30 @@ describe("diagnoseLaunchFailure", () => {
     }),
   );
 });
+
+// Fork: server browser rendering settings.
+describe("renderingArgs", () => {
+  it("keeps upstream's software rendering at scale 2 by default", () => {
+    expect(PreviewBrowserHost.renderingArgs({})).toEqual([
+      "--disable-gpu",
+      "--force-device-scale-factor=2",
+    ]);
+  });
+
+  it("drops --disable-gpu and uses ANGLE on Vulkan when the GPU is on", () => {
+    const args = PreviewBrowserHost.renderingArgs({
+      T3CODE_SERVER_BROWSER_GPU: "1",
+      T3CODE_SERVER_BROWSER_SCALE: "1",
+    });
+    expect(args).not.toContain("--disable-gpu");
+    expect(args).toContain("--use-angle=vulkan");
+    expect(args).toContain("--force-device-scale-factor=1");
+  });
+
+  it("ignores scales outside 1 to 3", () => {
+    for (const value of ["0", "0.5", "4", "abc", ""]) {
+      expect(PreviewBrowserHost.renderScale({ T3CODE_SERVER_BROWSER_SCALE: value })).toBe(2);
+    }
+    expect(PreviewBrowserHost.renderScale({ T3CODE_SERVER_BROWSER_SCALE: "1.5" })).toBe(1.5);
+  });
+});
